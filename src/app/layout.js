@@ -1,4 +1,12 @@
+import { JetBrains_Mono } from 'next/font/google';
 import './globals.css';
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '700', '800'],
+  display: 'swap',
+  variable: '--font-jetbrains',
+});
 
 export const metadata = {
   title: 'Shopee Terminal',
@@ -8,12 +16,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="id">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet" />
-      </head>
-      <body>{children}</body>
+      <body className={jetbrainsMono.className}>{children}</body>
     </html>
   );
 }
