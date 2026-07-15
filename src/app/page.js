@@ -11,6 +11,8 @@ import {
   aggregateByChannel,
   formatNumber,
   formatDateShort,
+  mergeMetaAdsData,
+  mergeCommissionData,
 } from '@/lib/csvParser';
 import SummaryCards from '@/components/SummaryCards';
 import TagLinkTable from '@/components/TagLinkTable';
@@ -48,12 +50,23 @@ export default function Dashboard() {
   // Load from localStorage on mount
   useEffect(() => {
     try {
-      const savedCsv = localStorage.getItem('shopee_csv_text');
+      // Try loading JSON format first (new), fallback to CSV text (old)
+      const savedJson = localStorage.getItem('shopee_data_json');
       const savedName = localStorage.getItem('shopee_csv_name');
-      if (savedCsv) {
-        const data = parseCSVData(savedCsv);
+      if (savedJson) {
+        const data = JSON.parse(savedJson);
         setRawData(data);
         setFileName(savedName || 'Uploaded CSV');
+      } else {
+        // Legacy: load from CSV text
+        const savedCsv = localStorage.getItem('shopee_csv_text');
+        if (savedCsv) {
+          const data = parseCSVData(savedCsv);
+          setRawData(data);
+          setFileName(savedName || 'Uploaded CSV');
+          // Migrate to JSON format
+          try { localStorage.setItem('shopee_data_json', JSON.stringify(data)); localStorage.removeItem('shopee_csv_text'); } catch (e2) { /* ignore */ }
+        }
       }
       const savedClickCsv = localStorage.getItem('shopee_click_csv_text');
       const savedClickName = localStorage.getItem('shopee_click_csv_name');
@@ -64,12 +77,22 @@ export default function Dashboard() {
       }
       const savedPpnRate = parseFloat(localStorage.getItem('meta_ads_ppn_rate')) || 0;
       setPpnRate(savedPpnRate);
-      const savedMetaCsv = localStorage.getItem('meta_ads_csv_text');
+      const savedMetaJson = localStorage.getItem('meta_ads_data_json');
       const savedMetaName = localStorage.getItem('meta_ads_csv_name');
-      if (savedMetaCsv) {
-        const mData = parseMetaAdsData(savedMetaCsv, savedPpnRate);
+      if (savedMetaJson) {
+        const mData = JSON.parse(savedMetaJson);
         setMetaAdsRawData(mData);
         setMetaAdsFileName(savedMetaName || 'Meta Ads CSV');
+      } else {
+        // Legacy: load from CSV text
+        const savedMetaCsv = localStorage.getItem('meta_ads_csv_text');
+        if (savedMetaCsv) {
+          const mData = parseMetaAdsData(savedMetaCsv, savedPpnRate);
+          setMetaAdsRawData(mData);
+          setMetaAdsFileName(savedMetaName || 'Meta Ads CSV');
+          // Migrate to JSON format
+          try { localStorage.setItem('meta_ads_data_json', JSON.stringify(mData)); localStorage.removeItem('meta_ads_csv_text'); } catch (e2) { /* ignore */ }
+        }
       }
     } catch (e) { /* ignore */ }
   }, []);
@@ -79,20 +102,25 @@ export default function Dashboard() {
     const reader = new FileReader();
     reader.onload = (e) => {
       const csvText = e.target.result;
+      const newData = parseCSVData(csvText);
+      // Merge with existing data instead of replacing
+      const mergedData = mergeCommissionData(rawData, newData);
       try {
-        localStorage.setItem('shopee_csv_text', csvText);
-        localStorage.setItem('shopee_csv_name', file.name);
+        localStorage.setItem('shopee_data_json', JSON.stringify(mergedData));
+        localStorage.removeItem('shopee_csv_text'); // cleanup old format
+        const existingName = fileName ? fileName.split(' + ') : [];
+        const newName = existingName.includes(file.name) ? existingName.join(' + ') : [...existingName, file.name].filter(Boolean).join(' + ');
+        localStorage.setItem('shopee_csv_name', newName);
+        setFileName(newName);
       } catch (err) { /* ignore */ }
-      const data = parseCSVData(csvText);
-      setRawData(data);
-      setFileName(file.name);
+      setRawData(mergedData);
       setDateFrom('');
       setDateTo('');
       setSelectedTagLink(null);
       setLoading(false);
     };
     reader.readAsText(file);
-  }, []);
+  }, [rawData, fileName]);
 
   const handleClickCSVUpload = useCallback((file) => {
     setLoading(true);
@@ -130,26 +158,33 @@ export default function Dashboard() {
     const reader = new FileReader();
     reader.onload = (e) => {
       const csvText = e.target.result;
+      const newData = parseMetaAdsData(csvText, rate);
+      // Merge with existing data instead of replacing
+      const mergedData = mergeMetaAdsData(metaAdsRawData, newData);
       try {
-        localStorage.setItem('meta_ads_csv_text', csvText);
-        localStorage.setItem('meta_ads_csv_name', file.name);
+        localStorage.setItem('meta_ads_data_json', JSON.stringify(mergedData));
+        localStorage.removeItem('meta_ads_csv_text'); // cleanup old format
+        const existingName = metaAdsFileName ? metaAdsFileName.split(' + ') : [];
+        const newName = existingName.includes(file.name) ? existingName.join(' + ') : [...existingName, file.name].filter(Boolean).join(' + ');
+        localStorage.setItem('meta_ads_csv_name', newName);
+        setMetaAdsFileName(newName);
       } catch (err) { /* ignore */ }
-      const data = parseMetaAdsData(csvText, rate);
-      setMetaAdsRawData(data);
-      setMetaAdsFileName(file.name);
+      setMetaAdsRawData(mergedData);
       setLoading(false);
       setActiveTab('metaads');
     };
     reader.readAsText(file);
-  }, [pendingMetaFile]);
+  }, [pendingMetaFile, metaAdsRawData, metaAdsFileName]);
 
   const handleResetData = useCallback(() => {
     try {
       localStorage.removeItem('shopee_csv_text');
+      localStorage.removeItem('shopee_data_json');
       localStorage.removeItem('shopee_csv_name');
       localStorage.removeItem('shopee_click_csv_text');
       localStorage.removeItem('shopee_click_csv_name');
       localStorage.removeItem('meta_ads_csv_text');
+      localStorage.removeItem('meta_ads_data_json');
       localStorage.removeItem('meta_ads_csv_name');
       localStorage.removeItem('meta_ads_ppn_rate');
     } catch (e) { /* ignore */ }
@@ -377,28 +412,30 @@ export default function Dashboard() {
         </p>
       </header>
 
-      {/* Date Range Filter - only show when commission data exists */}
-      {rawData.length > 0 && (
-        <div className="filter-bar">
-          <div className="date-range-group">
-            <label>Rentang Waktu</label>
-            <div className="date-range-inputs">
-              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} min={minDate} max={dateTo || maxDate} id="date-from" />
-              <span className="date-range-sep">→</span>
-              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} min={dateFrom || minDate} max={maxDate} id="date-to" />
-            </div>
-          </div>
-          {hasDateFilter && (
-            <button className="btn btn-ghost" onClick={resetDateFilter}>✕ Reset</button>
-          )}
-          <div className="date-range-info">
-            {!hasDateFilter
-              ? <span>{formatDateShort(minDate)} — {formatDateShort(maxDate)}</span>
-              : <span>{formatNumber(filteredData.length)} dari {formatNumber(rawData.length)} items</span>
-            }
+      {/* Date Range Filter - show when any data exists */}
+      <div className="filter-bar">
+        <div className="date-range-group">
+          <label>Rentang Waktu</label>
+          <div className="date-range-inputs">
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} min={minDate} max={dateTo || maxDate} id="date-from" />
+            <span className="date-range-sep">→</span>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} min={dateFrom || minDate} max={maxDate} id="date-to" />
           </div>
         </div>
-      )}
+        {hasDateFilter && (
+          <button className="btn btn-ghost" onClick={resetDateFilter}>✕ Reset</button>
+        )}
+        <div className="date-range-info">
+          {!hasDateFilter
+            ? <span>{formatDateShort(minDate)} — {formatDateShort(maxDate)}</span>
+            : <span>
+                {rawData.length > 0 && <>{formatNumber(filteredData.length)} dari {formatNumber(rawData.length)} items</>}
+                {rawData.length > 0 && metaAdsRawData.length > 0 && ' · '}
+                {metaAdsRawData.length > 0 && <>{formatNumber(filteredMetaAds.length)} dari {formatNumber(metaAdsRawData.length)} meta rows</>}
+              </span>
+          }
+        </div>
+      </div>
 
       {/* Tabs */}
       <div className="tabs">

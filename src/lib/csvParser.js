@@ -614,3 +614,45 @@ export function formatPercent(num, decimals = 1) {
   return num.toFixed(decimals) + '%';
 }
 
+// ===== DATA MERGE FUNCTIONS =====
+
+/**
+ * Merge Meta Ads data: combine existing + new, deduplicate by unique key.
+ * New data wins on conflict.
+ */
+export function mergeMetaAdsData(existingData, newData) {
+  const makeKey = (row) =>
+    `${row.reportStart}|${row.campaignName}|${row.platform}|${row.placement}|${row.devicePlatform}`;
+
+  const map = new Map();
+  // Add existing data first
+  existingData.forEach(row => {
+    map.set(makeKey(row), row);
+  });
+  // New data overwrites existing on conflict
+  newData.forEach(row => {
+    map.set(makeKey(row), row);
+  });
+  return [...map.values()];
+}
+
+/**
+ * Merge Commission data: combine existing + new, deduplicate by unique key.
+ * New data wins on conflict.
+ */
+export function mergeCommissionData(existingData, newData) {
+  const makeKey = (row) =>
+    `${row.orderId}|${row.itemName}|${row.tagLink1}|${row.price}|${row.qty}`;
+
+  const map = new Map();
+  // Add existing data first
+  existingData.forEach(row => {
+    map.set(makeKey(row), row);
+  });
+  // New data overwrites existing on conflict
+  newData.forEach(row => {
+    map.set(makeKey(row), row);
+  });
+  return [...map.values()];
+}
+
