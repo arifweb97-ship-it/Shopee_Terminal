@@ -288,7 +288,7 @@ export function parseMetaAdsData(csvText, ppnRate = 0) {
 
   const multiplier = 1 + (ppnRate / 100);
 
-  return result.data
+  const rawData = result.data
     .filter(row => row['Campaign name'] && row['Campaign name'].trim() !== '')
     .map(row => ({
       reportStart: row['Reporting starts'] || '',
@@ -309,6 +309,55 @@ export function parseMetaAdsData(csvText, ppnRate = 0) {
       attributionSetting: row['Attribution setting'] || '',
       ctr: parseFloat(row['CTR (link click-through rate)']) || 0,
     }));
+
+  const expandedData = [];
+  rawData.forEach(row => {
+    if (!row.reportStart) {
+      expandedData.push(row);
+      return;
+    }
+    
+    const start = new Date(row.reportStart);
+    const end = row.reportEnd ? new Date(row.reportEnd) : start;
+    
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      expandedData.push(row);
+      return;
+    }
+
+    const diffTime = end.getTime() - start.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1; // inclusive
+
+    if (diffDays <= 1) {
+      expandedData.push(row);
+    } else {
+      const dailySpend = row.amountSpent / diffDays;
+      const dailyImpressions = row.impressions / diffDays;
+      const dailyReach = row.reach / diffDays;
+      const dailyResults = row.results / diffDays;
+
+      for (let i = 0; i < diffDays; i++) {
+        const currentDate = new Date(start);
+        currentDate.setDate(start.getDate() + i);
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.getDate()).padStart(2, '0');
+        const dateStr = `${year}-${month}-${day}`;
+
+        expandedData.push({
+          ...row,
+          reportStart: dateStr,
+          reportEnd: dateStr,
+          amountSpent: dailySpend,
+          impressions: dailyImpressions,
+          reach: dailyReach,
+          results: dailyResults
+        });
+      }
+    }
+  });
+
+  return expandedData;
 }
 
 export function aggregateMetaAdsByCampaign(metaData) {
