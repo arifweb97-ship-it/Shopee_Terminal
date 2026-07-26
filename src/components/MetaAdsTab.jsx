@@ -144,7 +144,7 @@ export default function MetaAdsTab({ metaAdsData, allMetaAdsData, tagLinkData, c
         </div>
       )}
 
-      {/* Summary Cards */}
+      {/* Summary Cards — Row 1: 4 cards */}
       <section className="section">
         <div className="meta-ads-summary-grid">
           <div className="summary-card accent-cyan animate-in">
@@ -165,7 +165,7 @@ export default function MetaAdsTab({ metaAdsData, allMetaAdsData, tagLinkData, c
             <div className="card-value">{formatNumber(totalClicks)}</div>
             <div className="card-sub">CTR: {formatPercent(avgCtr)}</div>
           </div>
-          {totalShopeeClicks > 0 && (
+          {totalShopeeClicks > 0 ? (
             <div className="summary-card accent-cyan animate-in animate-delay-2">
               <div className="card-icon">🛒</div>
               <div className="card-label">Shopee Clicks</div>
@@ -178,34 +178,57 @@ export default function MetaAdsTab({ metaAdsData, allMetaAdsData, tagLinkData, c
                 ) : 'Dari Shopee Affiliate'}
               </div>
             </div>
-          )}
-          <div className="summary-card accent-orange animate-in animate-delay-2">
-            <div className="card-icon">💰</div>
-            <div className="card-label">Avg CPC</div>
-            <div className="card-value">{formatRupiah(avgCpc)}</div>
-            <div className="card-sub">Per link click</div>
-          </div>
-          {tagLinkData && tagLinkData.length > 0 && (
-            <>
-              <div className="summary-card accent-green animate-in animate-delay-3">
-                <div className="card-icon">📈</div>
-                <div className="card-label">ROAS</div>
-                <div className="card-value" style={{ color: overallRoas >= 1 ? 'var(--success)' : 'var(--danger)' }}>
-                  {overallRoas.toFixed(2)}x
-                </div>
-                <div className="card-sub">{overallRoas >= 1 ? 'Profitable' : 'Below target'}</div>
-              </div>
-              <div className={`summary-card ${overallProfitLoss >= 0 ? 'accent-green' : 'accent-danger'} animate-in animate-delay-3`}>
-                <div className="card-icon">{overallProfitLoss >= 0 ? '🟢' : '🔴'}</div>
-                <div className="card-label">Profit / Loss</div>
-                <div className="card-value" style={{ color: overallProfitLoss >= 0 ? 'var(--success)' : 'var(--danger)' }}>
-                  {overallProfitLoss >= 0 ? '+' : ''}{formatRupiah(overallProfitLoss)}
-                </div>
-                <div className="card-sub">🟢 {cuanCount} Cuan · 🔴 {boncosCount} Boncos</div>
-              </div>
-            </>
+          ) : (
+            <div className="summary-card accent-orange animate-in animate-delay-2">
+              <div className="card-icon">💰</div>
+              <div className="card-label">Avg CPC</div>
+              <div className="card-value">{formatRupiah(avgCpc)}</div>
+              <div className="card-sub">Per link click</div>
+            </div>
           )}
         </div>
+
+        {/* Row 2: CPC + ROAS + Profit/Loss */}
+        {tagLinkData && tagLinkData.length > 0 && (
+          <div className="meta-ads-summary-grid" style={{ marginTop: 14, gridTemplateColumns: 'repeat(3, 1fr)' }}>
+            {totalShopeeClicks > 0 && (
+              <div className="summary-card accent-orange animate-in">
+                <div className="card-icon">💰</div>
+                <div className="card-label">Avg CPC</div>
+                <div className="card-value">{formatRupiah(avgCpc)}</div>
+                <div className="card-sub">Per link click</div>
+              </div>
+            )}
+            <div className="summary-card accent-green animate-in animate-delay-1">
+              <div className="card-icon">📈</div>
+              <div className="card-label">ROAS</div>
+              <div className="card-value" style={{ color: overallRoas >= 1 ? 'var(--success)' : 'var(--danger)' }}>
+                {overallRoas.toFixed(2)}x
+              </div>
+              <div className="card-sub">{overallRoas >= 1 ? '✅ Profitable' : '⚠️ Below target'}</div>
+            </div>
+            <div className={`summary-card ${overallProfitLoss >= 0 ? 'accent-green' : 'accent-danger'} animate-in animate-delay-2`}>
+              <div className="card-icon">{overallProfitLoss >= 0 ? '🟢' : '🔴'}</div>
+              <div className="card-label">Profit / Loss</div>
+              <div className="card-value" style={{ color: overallProfitLoss >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                {overallProfitLoss >= 0 ? '+' : ''}{formatRupiah(overallProfitLoss)}
+              </div>
+              <div className="card-sub">🟢 {cuanCount} Cuan · 🔴 {boncosCount} Boncos</div>
+            </div>
+          </div>
+        )}
+
+        {/* Row 2 without taglink: just CPC */}
+        {(!tagLinkData || tagLinkData.length === 0) && totalShopeeClicks > 0 && (
+          <div className="meta-ads-summary-grid" style={{ marginTop: 14, gridTemplateColumns: 'repeat(4, 1fr)' }}>
+            <div className="summary-card accent-orange animate-in">
+              <div className="card-icon">💰</div>
+              <div className="card-label">Avg CPC</div>
+              <div className="card-value">{formatRupiah(avgCpc)}</div>
+              <div className="card-sub">Per link click</div>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Sub-tabs */}

@@ -1,5 +1,45 @@
 import Papa from 'papaparse';
 
+// ===== AUTO-DETECT CSV TYPE =====
+
+/**
+ * Detect CSV type by reading the first line (headers).
+ * Returns: 'commission' | 'meta_ads' | 'click' | 'unknown'
+ */
+export function detectCSVType(csvText) {
+  if (!csvText || typeof csvText !== 'string') return 'unknown';
+  
+  // Get first line (header row)
+  const firstLine = csvText.split('\n')[0] || '';
+  const headerLower = firstLine.toLowerCase();
+  
+  // Shopee Commission: has "order id" and "commission" columns
+  if (
+    (headerLower.includes('order id') || headerLower.includes('order_id')) &&
+    (headerLower.includes('commission') || headerLower.includes('item name') || headerLower.includes('purchase value'))
+  ) {
+    return 'commission';
+  }
+  
+  // Meta Ads: has "campaign name" and "amount spent"
+  if (
+    headerLower.includes('campaign name') &&
+    (headerLower.includes('amount spent') || headerLower.includes('impressions') || headerLower.includes('results'))
+  ) {
+    return 'meta_ads';
+  }
+  
+  // Shopee Click: has "click id" and "click time"
+  if (
+    (headerLower.includes('click id') || headerLower.includes('click_id')) &&
+    (headerLower.includes('click time') || headerLower.includes('click_time'))
+  ) {
+    return 'click';
+  }
+  
+  return 'unknown';
+}
+
 export function parseCSVData(csvText) {
   const result = Papa.parse(csvText, {
     header: true,
@@ -76,8 +116,8 @@ export function aggregateClicksByTagLink(clickData) {
 
 
 export function formatRupiah(num) {
-  if (num == null || isNaN(num)) return 'Rp 0';
-  return 'Rp ' + Math.round(num).toLocaleString('id-ID');
+  if (num == null || isNaN(num)) return 'Rp\u00A00';
+  return 'Rp\u00A0' + Math.round(num).toLocaleString('id-ID');
 }
 
 export function formatNumber(num) {
@@ -147,8 +187,8 @@ export function aggregateByTagLink(data, clickData = null) {
     entry.totalOrders.add(row.orderId);
     entry.totalItems += 1;
     entry.totalPurchaseValue += row.purchaseValue;
-    entry.totalCommission += row.totalOrderComm;
-    entry.totalAffiliateComm += row.affiliateNetComm;
+    entry.totalCommission += row.itemTotalComm;
+    entry.totalAffiliateComm += row.itemTotalComm;
 
     if (row.clickTime && row.orderTime) {
       const diffHours = getTimeDiffHours(row.clickTime, row.orderTime);
@@ -170,7 +210,7 @@ export function aggregateByTagLink(data, clickData = null) {
         if (!entry.dates[date]) entry.dates[date] = { orders: new Set(), items: 0, commission: 0, purchaseValue: 0 };
         entry.dates[date].orders.add(row.orderId);
         entry.dates[date].items += 1;
-        entry.dates[date].commission += row.totalOrderComm;
+        entry.dates[date].commission += row.itemTotalComm;
         entry.dates[date].purchaseValue += row.purchaseValue;
       }
     }
@@ -236,13 +276,13 @@ export function aggregateByDate(data) {
     entry.orders.add(row.orderId);
     entry.items += 1;
     entry.totalPurchaseValue += row.purchaseValue;
-    entry.totalCommission += row.totalOrderComm;
+    entry.totalCommission += row.itemTotalComm;
 
     const tag = row.tagLink1 || 'Unknown';
     if (!entry.tagLinks[tag]) entry.tagLinks[tag] = { orders: new Set(), items: 0, commission: 0, purchaseValue: 0 };
     entry.tagLinks[tag].orders.add(row.orderId);
     entry.tagLinks[tag].items += 1;
-    entry.tagLinks[tag].commission += row.totalOrderComm;
+    entry.tagLinks[tag].commission += row.itemTotalComm;
     entry.tagLinks[tag].purchaseValue += row.purchaseValue;
 
     const ch = row.channel || 'Unknown';
@@ -271,7 +311,7 @@ export function aggregateByChannel(data) {
     }
     map[ch].orders.add(row.orderId);
     map[ch].items += 1;
-    map[ch].totalCommission += row.totalOrderComm;
+    map[ch].totalCommission += row.itemTotalComm;
     map[ch].totalPurchaseValue += row.purchaseValue;
   });
   return Object.values(map).map(e => ({ ...e, orders: e.orders.size })).sort((a, b) => b.totalCommission - a.totalCommission);
@@ -705,3 +745,67 @@ export function mergeCommissionData(existingData, newData) {
   return [...map.values()];
 }
 
+// ===== COMPLETED ORDERS BY COMPLETE DATE =====
+/**
+ * Aggregate only COMPLETED orders, grouped by their Complete Time date.
+ * This represents money that can actually be disbursed on each day.
+ */
+export function aggregateByCompleteDate(data) {
+  const map = {};
+
+  data
+    .filter(r => r.affiliateStatus === 'Completed' && r.completeTime)
+    .forEach(row => {
+      const date = row.completeTime.split(' ')[0];
+      if (!date) return;
+
+      if (!map[date]) {
+        map[date] = {
+          date,
+          orders: new Set(),
+          items: 0,
+          totalCommission: 0,
+          totalAffiliateComm: 0,
+          totalPurchaseValue: 0,
+          tagLinks: {},
+          channels: {},
+        };
+      }
+      const entry = map[date];
+      entry.orders.add(row.orderId);
+      entry.items += 1;
+      entry.totalCommission += row.totalOrderComm;
+      entry.totalAffiliateComm += row.affiliateNetComm;
+      entry.totalPurchaseValue += row.purchaseValue;
+
+      const tag = row.tagLink1 || 'Unknown';
+      if (!entry.tagLinks[tag]) {
+        entry.tagLinks[tag] = { orders: new Set(), items: 0, commission: 0, affiliateComm: 0, purchaseValue: 0 };
+      }
+      entry.tagLinks[tag].orders.add(row.orderId);
+      entry.tagLinks[tag].items += 1;
+      entry.tagLinks[tag].commission += row.totalOrderComm;
+      entry.tagLinks[tag].affiliateComm += row.affiliateNetComm;
+      entry.tagLinks[tag].purchaseValue += row.purchaseValue;
+
+      const ch = row.channel || 'Unknown';
+      entry.channels[ch] = (entry.channels[ch] || 0) + 1;
+    });
+
+  return Object.values(map)
+    .map(entry => ({
+      ...entry,
+      orders: entry.orders.size,
+      tagLinks: Object.entries(entry.tagLinks)
+        .map(([name, d]) => ({
+          name,
+          orders: d.orders.size,
+          items: d.items,
+          commission: d.commission,
+          affiliateComm: d.affiliateComm,
+          purchaseValue: d.purchaseValue,
+        }))
+        .sort((a, b) => b.commission - a.commission),
+    }))
+    .sort((a, b) => b.date.localeCompare(a.date)); // terbaru di atas
+}

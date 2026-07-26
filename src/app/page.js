@@ -6,6 +6,7 @@ import {
   parseCSVData,
   parseClickData,
   parseMetaAdsData,
+  detectCSVType,
   aggregateByTagLink,
   aggregateByDate,
   aggregateByChannel,
@@ -24,6 +25,9 @@ import CsvUploader from '@/components/CsvUploader';
 import TagLinkDetail from '@/components/TagLinkDetail';
 import MetaAdsTab from '@/components/MetaAdsTab';
 import MetaAdsCampaignDetail from '@/components/MetaAdsCampaignDetail';
+import SmartUploader from '@/components/SmartUploader';
+import RekapTab from '@/components/RekapTab';
+import CompletedOrdersSection from '@/components/CompletedOrdersSection';
 
 export default function Dashboard() {
   const [rawData, setRawData] = useState([]);
@@ -46,6 +50,9 @@ export default function Dashboard() {
   const [ppnRate, setPpnRate] = useState(0);
   const [showPpnModal, setShowPpnModal] = useState(false);
   const [pendingMetaFile, setPendingMetaFile] = useState(null);
+  // Smart uploader pending grouped files (for PPN modal)
+  const [pendingSmartGrouped, setPendingSmartGrouped] = useState(null);
+  const [pendingSmartProgress, setPendingSmartProgress] = useState(null);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -144,13 +151,87 @@ export default function Dashboard() {
     setShowPpnModal(true);
   }, []);
 
-  const handlePpnSelect = useCallback((rate) => {
+  const handlePpnSelect = useCallback(async (rate) => {
     setPpnRate(rate);
     setShowPpnModal(false);
     try {
       localStorage.setItem('meta_ads_ppn_rate', String(rate));
     } catch (e) { /* ignore */ }
 
+    // If triggered from SmartUploader (multi-file), continue processing
+    if (pendingSmartGrouped) {
+      const grouped = pendingSmartGrouped;
+      const onProgress = pendingSmartProgress || (() => {});
+      setPendingSmartGrouped(null);
+      setPendingSmartProgress(null);
+
+      let processed = 0;
+      let currentRawData = rawData;
+      let currentMetaData = metaAdsRawData;
+      let currentFileName = fileName;
+      let currentMetaFileName = metaAdsFileName;
+
+      for (const f of grouped.commission) {
+        const newData = parseCSVData(f.text);
+        currentRawData = mergeCommissionData(currentRawData, newData);
+        const names = currentFileName ? currentFileName.split(' + ') : [];
+        if (!names.includes(f.name)) names.push(f.name);
+        currentFileName = names.filter(Boolean).join(' + ');
+        processed++;
+        onProgress(processed);
+      }
+      for (const f of grouped.click) {
+        const cData = parseClickData(f.text);
+        setClickData(cData);
+        setClickFileName(f.name);
+        try {
+          localStorage.setItem('shopee_click_csv_text', f.text);
+          localStorage.setItem('shopee_click_csv_name', f.name);
+        } catch (e) { /* ignore */ }
+        processed++;
+        onProgress(processed);
+      }
+      for (const f of grouped.meta_ads) {
+        const newData = parseMetaAdsData(f.text, rate);
+        currentMetaData = mergeMetaAdsData(currentMetaData, newData);
+        const names = currentMetaFileName ? currentMetaFileName.split(' + ') : [];
+        if (!names.includes(f.name)) names.push(f.name);
+        currentMetaFileName = names.filter(Boolean).join(' + ');
+        processed++;
+        onProgress(processed);
+      }
+      if (grouped.commission.length > 0) {
+        setRawData(currentRawData);
+        setFileName(currentFileName);
+        try {
+          localStorage.setItem('shopee_data_json', JSON.stringify(currentRawData));
+          localStorage.removeItem('shopee_csv_text');
+          localStorage.setItem('shopee_csv_name', currentFileName);
+        } catch (e) { /* ignore */ }
+      }
+      if (grouped.meta_ads.length > 0) {
+        setMetaAdsRawData(currentMetaData);
+        setMetaAdsFileName(currentMetaFileName);
+        try {
+          localStorage.setItem('meta_ads_data_json', JSON.stringify(currentMetaData));
+          localStorage.removeItem('meta_ads_csv_text');
+          localStorage.setItem('meta_ads_csv_name', currentMetaFileName);
+        } catch (e) { /* ignore */ }
+      }
+      if (grouped.commission.length > 0 && grouped.meta_ads.length > 0) {
+        setActiveTab('rekap');
+      } else if (grouped.meta_ads.length > 0) {
+        setActiveTab('metaads');
+      } else {
+        setActiveTab('overview');
+      }
+      setDateFrom('');
+      setDateTo('');
+      setSelectedTagLink(null);
+      return;
+    }
+
+    // Single file upload via CsvUploader
     const file = pendingMetaFile;
     if (!file) return;
     setPendingMetaFile(null);
@@ -174,7 +255,7 @@ export default function Dashboard() {
       setActiveTab('metaads');
     };
     reader.readAsText(file);
-  }, [pendingMetaFile, metaAdsRawData, metaAdsFileName]);
+  }, [pendingMetaFile, pendingSmartGrouped, pendingSmartProgress, metaAdsRawData, metaAdsFileName, rawData, fileName]);
 
   const handleResetData = useCallback(() => {
     try {
@@ -203,6 +284,56 @@ export default function Dashboard() {
     setShowResetConfirm(false);
   }, []);
 
+  // ===== SMART MULTI-FILE UPLOAD HANDLER =====
+  const handleSmartUpload = useCallback(async (grouped, onProgress, hasMetaAds) => {
+    // If there are Meta Ads files, show PPN modal first
+    if (hasMetaAds) {
+      setPendingSmartGrouped(grouped);
+      setPendingSmartProgress(() => onProgress);
+      setShowPpnModal(true);
+      return;
+    }
+
+    // No Meta Ads — process everything directly
+    let processed = 0;
+    let currentRawData = rawData;
+    let currentFileName = fileName;
+
+    for (const f of grouped.commission) {
+      const newData = parseCSVData(f.text);
+      currentRawData = mergeCommissionData(currentRawData, newData);
+      const names = currentFileName ? currentFileName.split(' + ') : [];
+      if (!names.includes(f.name)) names.push(f.name);
+      currentFileName = names.filter(Boolean).join(' + ');
+      processed++;
+      onProgress(processed);
+    }
+    for (const f of grouped.click) {
+      const cData = parseClickData(f.text);
+      setClickData(cData);
+      setClickFileName(f.name);
+      try {
+        localStorage.setItem('shopee_click_csv_text', f.text);
+        localStorage.setItem('shopee_click_csv_name', f.name);
+      } catch (e) { /* ignore */ }
+      processed++;
+      onProgress(processed);
+    }
+    if (grouped.commission.length > 0) {
+      setRawData(currentRawData);
+      setFileName(currentFileName);
+      try {
+        localStorage.setItem('shopee_data_json', JSON.stringify(currentRawData));
+        localStorage.removeItem('shopee_csv_text');
+        localStorage.setItem('shopee_csv_name', currentFileName);
+      } catch (e) { /* ignore */ }
+    }
+    setActiveTab('overview');
+    setDateFrom('');
+    setDateTo('');
+    setSelectedTagLink(null);
+  }, [rawData, fileName, metaAdsRawData, metaAdsFileName]);
+
   // Combine dates from commission data AND meta ads data
   const uniqueDates = useMemo(() => {
     const commDates = rawData.map(r => r.orderTime?.split(' ')[0]).filter(Boolean);
@@ -225,6 +356,19 @@ export default function Dashboard() {
     });
   }, [rawData, dateFrom, dateTo]);
 
+  // Filter click data by date
+  const filteredClickData = useMemo(() => {
+    if (!clickData) return null;
+    if (!dateFrom && !dateTo) return clickData;
+    return clickData.filter(r => {
+      if (!r.clickTime) return false;
+      const d = r.clickTime.split(' ')[0];
+      if (dateFrom && d < dateFrom) return false;
+      if (dateTo && d > dateTo) return false;
+      return true;
+    });
+  }, [clickData, dateFrom, dateTo]);
+
   // Filter meta ads data by date
   const filteredMetaAds = useMemo(() => {
     if (!dateFrom && !dateTo) return metaAdsRawData;
@@ -237,15 +381,15 @@ export default function Dashboard() {
     });
   }, [metaAdsRawData, dateFrom, dateTo]);
 
-  const tagLinkData = aggregateByTagLink(filteredData, clickData);
+  const tagLinkData = aggregateByTagLink(filteredData, filteredClickData);
   const dateData = aggregateByDate(filteredData);
   const channelData = aggregateByChannel(filteredData);
 
   const totalOrders = new Set(filteredData.map(r => r.orderId)).size;
-  const totalCommission = filteredData.reduce((sum, r) => sum + r.totalOrderComm, 0);
+  const totalCommission = filteredData.reduce((sum, r) => sum + r.itemTotalComm, 0);
   const totalPurchaseValue = filteredData.reduce((sum, r) => sum + r.purchaseValue, 0);
   const totalTagLinks = new Set(filteredData.map(r => r.tagLink1).filter(Boolean)).size;
-  const totalClicks = clickData ? clickData.length : 0;
+  const totalClicks = filteredClickData ? filteredClickData.length : 0;
 
   const hasDateFilter = dateFrom || dateTo;
   const resetDateFilter = () => { setDateFrom(''); setDateTo(''); };
@@ -293,8 +437,20 @@ export default function Dashboard() {
       {/* Nav */}
       <nav className="nav-header">
         <div className="nav-logo" style={{ cursor: 'pointer' }} onClick={(e) => { e.preventDefault(); setSelectedTagLink(null); setSelectedCampaign(null); setActiveTab('overview'); }}>
-          <div className="nav-logo-icon">ST</div>
-          <span className="nav-logo-text">SHOPEE TERMINAL</span>
+          <div className="nav-logo-icon new-terminal-logo">
+            <span style={{ color: '#e8e8f0', fontSize: '16px', fontWeight: 500 }}>&gt;</span>
+            <span className="blinking-cursor" style={{ color: 'var(--orange)', fontWeight: 800, marginLeft: '2px', textShadow: '0 0 8px rgba(255, 145, 0, 0.6)' }}>_</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ 
+                background: 'var(--orange)', color: '#fff', fontSize: '8px', fontWeight: 800, 
+                padding: '2px 4px', borderRadius: '3px', lineHeight: 1,
+                boxShadow: '0 2px 4px rgba(255,145,0,0.3)'
+              }}>S</div>
+              <span className="nav-logo-text" style={{ textTransform: 'none', letterSpacing: '0.5px' }}>SHOPEE <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>Terminal</span></span>
+            </div>
+          </div>
         </div>
         <div className="nav-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           {hasAnyData && (
@@ -321,6 +477,7 @@ export default function Dashboard() {
               )}
             </div>
           )}
+          <SmartUploader onProcessFiles={handleSmartUpload} isCompact={true} />
           <CsvUploader onUpload={handleCSVUpload} id="comm-upload" label="Komisi" />
           <CsvUploader onUpload={handleClickCSVUpload} id="click-upload" label="Klik" icon="🖱️" />
           <CsvUploader onUpload={handleMetaAdsUpload} id="meta-upload" label="Meta Ads" icon="📊" />
@@ -379,20 +536,31 @@ export default function Dashboard() {
       {/* Empty State */}
       {!hasAnyData && !loading && (
         <div className="welcome-screen">
-          <div className="welcome-icon">&gt;_</div>
-          <h1 className="welcome-title">SHOPEE TERMINAL : COMMISSION SYS</h1>
+          <div className="welcome-icon">⚡</div>
+          <h1 className="welcome-title">SHOPEE <span style={{ color: 'var(--text-muted)' }}>Terminal</span></h1>
           <p className="welcome-desc">
-            AWAITING DATA INPUT... UPLOAD COMMISSION REPORT [REQ], CLICK REPORT [OPT], OR META ADS [OPT] TO INITIALIZE TERMINAL.
+            Dashboard analitik Shopee Affiliate & Meta Ads.<br />
+            Upload file CSV untuk mulai analisis performa.
           </p>
-          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '16px' }}>
+          {/* Smart Multi-Upload Zone */}
+          <div style={{ width: '100%', maxWidth: 600, marginTop: 8 }}>
+            <SmartUploader onProcessFiles={handleSmartUpload} isCompact={false} />
+          </div>
+          <div style={{ marginTop: 20, fontSize: 10, color: 'var(--text-muted)', letterSpacing: '1px', textTransform: 'uppercase' }}>
+            Atau upload manual per kategori:
+          </div>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '8px' }}>
             <div className="upload-zone" onClick={() => document.getElementById('comm-upload')?.click()}>
-              <div className="upload-text">[1] LOAD COMM DATA</div>
+              <div className="upload-text">🛒 Komisi</div>
+              <div className="upload-hint">Shopee Commission CSV</div>
             </div>
             <div className="upload-zone" onClick={() => document.getElementById('click-upload')?.click()}>
-              <div className="upload-text">[2] LOAD CLICK DATA</div>
+              <div className="upload-text">🖱️ Klik</div>
+              <div className="upload-hint">Shopee Click CSV</div>
             </div>
             <div className="upload-zone" onClick={() => document.getElementById('meta-upload')?.click()}>
-              <div className="upload-text">[3] LOAD META ADS</div>
+              <div className="upload-text">📊 Meta Ads</div>
+              <div className="upload-hint">Meta Ads Report CSV</div>
             </div>
           </div>
         </div>
@@ -444,14 +612,18 @@ export default function Dashboard() {
             { key: 'overview', icon: '>', label: 'OVERVIEW' },
             { key: 'taglinks', icon: '>', label: 'TAGLINKS' },
             { key: 'daily', icon: '>', label: 'DAILY' },
+            { key: 'selesai', icon: '✅', label: 'SELESAI' },
           ] : []),
           ...(metaAdsRawData.length > 0 ? [
             { key: 'metaads', icon: '📊', label: 'META ADS' },
           ] : []),
+          ...(rawData.length > 0 && metaAdsRawData.length > 0 ? [
+            { key: 'rekap', icon: '📋', label: 'REKAP' },
+          ] : []),
         ].map(t => (
           <button
             key={t.key}
-            className={`tab ${activeTab === t.key ? 'active' : ''}`}
+          className={`tab ${activeTab === t.key ? 'active' : ''} ${t.key === 'rekap' ? 'tab-rekap' : ''} ${t.key === 'selesai' ? 'tab-selesai' : ''}`}
             onClick={() => { setActiveTab(t.key); if (t.key !== 'detail') setSelectedTagLink(null); if (t.key !== 'campaign-detail') setSelectedCampaign(null); }}
             id={`tab-${t.key}`}
           >
@@ -519,6 +691,17 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* SELESAI — Pesanan yang sudah complete, bisa dicairkan */}
+      {activeTab === 'selesai' && rawData.length > 0 && (
+        <div>
+          <h2 className="section-title">💰 Pesanan Selesai — Komisi Siap Cair</h2>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 16, marginTop: -8 }}>
+            Berdasarkan <strong style={{ color: 'var(--accent)' }}>Complete Time</strong> dan status <strong style={{ color: 'var(--success)' }}>Completed</strong>. Klik tanggal untuk lihat breakdown per TagLink.
+          </p>
+          <CompletedOrdersSection data={filteredData} />
+        </div>
+      )}
+
       {/* TAGLINK DETAIL */}
       {activeTab === 'detail' && selectedTagLink && (
         <TagLinkDetail
@@ -548,6 +731,16 @@ export default function Dashboard() {
           tagLinkData={tagLinkData}
           commissionData={filteredData}
           onBack={handleBackFromCampaignDetail}
+        />
+      )}
+
+      {/* REKAP TAB */}
+      {activeTab === 'rekap' && rawData.length > 0 && metaAdsRawData.length > 0 && (
+        <RekapTab
+          metaAdsData={filteredMetaAds}
+          tagLinkData={tagLinkData}
+          commissionData={filteredData}
+          onCampaignClick={handleCampaignClick}
         />
       )}
 
