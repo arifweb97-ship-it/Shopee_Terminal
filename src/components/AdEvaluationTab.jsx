@@ -377,30 +377,31 @@ export default function AdEvaluationTab({ metaAdsData = [], tagLinkData = [], co
               fontWeight: 600, 
               textTransform: 'uppercase', 
               letterSpacing: '0.5px',
-              paddingTop: 14,
-              paddingBottom: 14
+              paddingTop: 12,
+              paddingBottom: 12,
+              whiteSpace: 'nowrap'
             }}>
               <div style={{ width: 40, textAlign: 'center' }}>#</div>
-              <div style={{ width: 50, textAlign: 'center' }} onClick={() => handleSort('score')} className="sortable-th">
+              <div style={{ width: 50, textAlign: 'center', cursor: 'pointer' }} onClick={() => handleSort('score')} className="sortable-th">
                 Skor {getSortArrow('score')}
               </div>
-              <div style={{ flex: '1 1 200px', minWidth: 180 }} onClick={() => handleSort('campaignName')} className="sortable-th">
+              <div style={{ flex: '1 1 200px', minWidth: 180, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={() => handleSort('campaignName')} className="sortable-th">
                 Campaign & TagLink {getSortArrow('campaignName')}
               </div>
               <div style={{ width: 90, textAlign: 'center' }}>Mulai Iklan</div>
-              <div style={{ width: 140, textAlign: 'center' }} onClick={() => handleSort('durationDays')} className="sortable-th">
+              <div style={{ width: 140, textAlign: 'center', cursor: 'pointer' }} onClick={() => handleSort('durationDays')} className="sortable-th">
                 Durasi {getSortArrow('durationDays')}
               </div>
-              <div style={{ width: 110, textAlign: 'right' }} onClick={() => handleSort('totalSpend')} className="sortable-th">
-                Biaya Meta Ads {getSortArrow('totalSpend')}
+              <div style={{ width: 110, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('totalSpend')} className="sortable-th">
+                Biaya Ads {getSortArrow('totalSpend')}
               </div>
-              <div style={{ width: 110, textAlign: 'right' }} onClick={() => handleSort('revenue')} className="sortable-th">
+              <div style={{ width: 110, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('revenue')} className="sortable-th">
                 Komisi {getSortArrow('revenue')}
               </div>
-              <div style={{ width: 120, textAlign: 'right' }} onClick={() => handleSort('profitLoss')} className="sortable-th">
+              <div style={{ width: 120, textAlign: 'right', cursor: 'pointer' }} onClick={() => handleSort('profitLoss')} className="sortable-th">
                 Profit / Rugi {getSortArrow('profitLoss')}
               </div>
-              <div style={{ width: 70, textAlign: 'center' }} onClick={() => handleSort('roas')} className="sortable-th">
+              <div style={{ width: 70, textAlign: 'center', cursor: 'pointer' }} onClick={() => handleSort('roas')} className="sortable-th">
                 ROAS {getSortArrow('roas')}
               </div>
               <div style={{ width: 95, textAlign: 'center' }}>Status</div>
