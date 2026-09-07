@@ -6,7 +6,6 @@ import {
   parseCSVData,
   parseClickData,
   parseMetaAdsData,
-  detectCSVType,
   aggregateByTagLink,
   aggregateByDate,
   aggregateByChannel,
@@ -27,6 +26,7 @@ import MetaAdsTab from '@/components/MetaAdsTab';
 import MetaAdsCampaignDetail from '@/components/MetaAdsCampaignDetail';
 import SmartUploader from '@/components/SmartUploader';
 import RekapTab from '@/components/RekapTab';
+import AdEvaluationTab from '@/components/AdEvaluationTab';
 import CompletedOrdersSection from '@/components/CompletedOrdersSection';
 
 export default function Dashboard() {
@@ -616,6 +616,7 @@ export default function Dashboard() {
           ] : []),
           ...(metaAdsRawData.length > 0 ? [
             { key: 'metaads', icon: '📊', label: 'META ADS' },
+            { key: 'evaluasi', icon: '🔍', label: 'EVALUASI' },
           ] : []),
           ...(rawData.length > 0 && metaAdsRawData.length > 0 ? [
             { key: 'rekap', icon: '📋', label: 'REKAP' },
@@ -623,7 +624,7 @@ export default function Dashboard() {
         ].map(t => (
           <button
             key={t.key}
-          className={`tab ${activeTab === t.key ? 'active' : ''} ${t.key === 'rekap' ? 'tab-rekap' : ''} ${t.key === 'selesai' ? 'tab-selesai' : ''}`}
+          className={`tab ${activeTab === t.key ? 'active' : ''} ${t.key === 'rekap' ? 'tab-rekap' : ''} ${t.key === 'selesai' ? 'tab-selesai' : ''} ${t.key === 'evaluasi' ? 'tab-evaluasi' : ''}`}
             onClick={() => { setActiveTab(t.key); if (t.key !== 'detail') setSelectedTagLink(null); if (t.key !== 'campaign-detail') setSelectedCampaign(null); }}
             id={`tab-${t.key}`}
           >
@@ -731,6 +732,16 @@ export default function Dashboard() {
           tagLinkData={tagLinkData}
           commissionData={filteredData}
           onBack={handleBackFromCampaignDetail}
+        />
+      )}
+
+      {/* EVALUASI TAB */}
+      {activeTab === 'evaluasi' && metaAdsRawData.length > 0 && (
+        <AdEvaluationTab
+          metaAdsData={filteredMetaAds}
+          tagLinkData={tagLinkData}
+          commissionData={filteredData}
+          onCampaignClick={handleCampaignClick}
         />
       )}
 

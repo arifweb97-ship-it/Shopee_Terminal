@@ -348,6 +348,7 @@ export function parseMetaAdsData(csvText, ppnRate = 0) {
       reach: parseFloat(row['Reach']) || 0,
       attributionSetting: row['Attribution setting'] || '',
       ctr: parseFloat(row['CTR (link click-through rate)']) || 0,
+      campaignStartDate: row['Starts'] || '',
     }));
 
   const expandedData = [];
@@ -415,9 +416,18 @@ export function aggregateMetaAdsByCampaign(metaData) {
         budgetType: row.adSetBudgetType,
         delivery: row.campaignDelivery,
         reportDate: row.reportStart,
+        campaignStartDate: row.campaignStartDate || '',
+        reportDates: new Set(),
         placements: {},
         platforms: {},
       };
+    }
+    // Track the earliest campaign start date and all report dates
+    if (row.campaignStartDate && (!map[name].campaignStartDate || row.campaignStartDate < map[name].campaignStartDate)) {
+      map[name].campaignStartDate = row.campaignStartDate;
+    }
+    if (row.reportStart) {
+      map[name].reportDates.add(row.reportStart);
     }
     const entry = map[name];
     entry.totalSpend += row.amountSpent;
@@ -448,16 +458,51 @@ export function aggregateMetaAdsByCampaign(metaData) {
     }
   });
 
+  // Find global last report date across ALL data
+  const allReportDates = new Set();
+  metaData.forEach(row => {
+    if (row.reportStart) allReportDates.add(row.reportStart.split(' ')[0]);
+    if (row.reportEnd) allReportDates.add(row.reportEnd.split(' ')[0]);
+  });
+  const sortedAllDates = [...allReportDates].sort();
+  const globalLastDateStr = sortedAllDates.length > 0 ? sortedAllDates[sortedAllDates.length - 1] : '';
+
+  const parseUtcDate = (dStr) => {
+    if (!dStr) return null;
+    const m = String(dStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    const d = new Date(dStr);
+    return isNaN(d.getTime()) ? null : new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  };
+
+  const globalLastDate = parseUtcDate(globalLastDateStr);
+
   return Object.values(map).map(entry => {
     const cpc = entry.totalClicks > 0 ? entry.totalSpend / entry.totalClicks : 0;
     const ctr = entry.totalImpressions > 0 ? (entry.totalClicks / entry.totalImpressions) * 100 : 0;
     const cpm = entry.totalImpressions > 0 ? (entry.totalSpend / entry.totalImpressions) * 1000 : 0;
+
+    // Calculate campaign duration: from Starts → global last report date (inclusive)
+    // Example: Starts = 2026-09-05, Global Last = 2026-09-07 -> 5, 6, 7 = 3 days!
+    const startDate = parseUtcDate(entry.campaignStartDate);
+    const reportDatesArr = [...entry.reportDates].sort();
+    let durationDays = 0;
+    if (startDate && globalLastDate) {
+      const diffMs = globalLastDate.getTime() - startDate.getTime();
+      const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+      durationDays = Math.max(1, diffDays + 1);
+    } else if (reportDatesArr.length > 0) {
+      durationDays = reportDatesArr.length;
+    }
 
     return {
       ...entry,
       cpc,
       ctr,
       cpm,
+      durationDays,
+      globalLastDate: globalLastDateStr,
+      reportDates: reportDatesArr,
       placements: Object.values(entry.placements)
         .map(p => ({
           ...p,
@@ -550,17 +595,45 @@ export function matchCampaignToTagLink(campaignName) {
 
 export function crossReferenceAdsWithCommission(metaCampaigns, tagLinkData, customMapping = {}) {
   return metaCampaigns.map(campaign => {
-    // Try custom mapping first, then auto-match
-    let matchedTagLink = customMapping[campaign.campaignName] || matchCampaignToTagLink(campaign.campaignName);
-    
-    // Find matching taglink data
+    let matchedTagLink = customMapping[campaign.campaignName];
     let tagData = null;
+
     if (matchedTagLink) {
       tagData = tagLinkData.find(t => 
         t.name.toLowerCase() === matchedTagLink.toLowerCase() ||
         t.name.toLowerCase().includes(matchedTagLink.toLowerCase()) ||
         matchedTagLink.toLowerCase().includes(t.name.toLowerCase())
       );
+    }
+
+    const cleanCampaign = campaign.campaignName.replace(/\s*setingan\s*new\s*/gi, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+
+    // 1. Direct normalized alphanumeric match (e.g. "KunciLisku" === "kuncilisku")
+    if (!tagData && cleanCampaign) {
+      tagData = tagLinkData.find(t => {
+        const cleanTag = t.name.replace(/[^a-z0-9]/gi, '').toLowerCase();
+        return cleanTag === cleanCampaign;
+      });
+    }
+
+    // 2. Try CAMPAIGN_TAGLINK_MAP
+    if (!tagData) {
+      matchedTagLink = matchCampaignToTagLink(campaign.campaignName);
+      if (matchedTagLink) {
+        tagData = tagLinkData.find(t => 
+          t.name.toLowerCase() === matchedTagLink.toLowerCase() ||
+          t.name.toLowerCase().includes(matchedTagLink.toLowerCase()) ||
+          matchedTagLink.toLowerCase().includes(t.name.toLowerCase())
+        );
+      }
+    }
+
+    // 3. Substring match
+    if (!tagData && cleanCampaign.length >= 4) {
+      tagData = tagLinkData.find(t => {
+        const cleanTag = t.name.replace(/[^a-z0-9]/gi, '').toLowerCase();
+        return cleanTag.length >= 4 && (cleanCampaign.includes(cleanTag) || cleanTag.includes(cleanCampaign));
+      });
     }
 
     const revenue = tagData ? tagData.totalCommission : 0;
@@ -591,28 +664,6 @@ export function crossReferenceAdsWithCommission(metaCampaigns, tagLinkData, cust
   }).sort((a, b) => b.totalSpend - a.totalSpend);
 }
 
-// Aggregate meta ads data by date for daily breakdown
-export function aggregateMetaAdsByDate(metaData) {
-  const map = {};
-  metaData.forEach(row => {
-    const date = row.reportStart;
-    if (!date) return;
-    if (!map[date]) {
-      map[date] = { date, spend: 0, impressions: 0, reach: 0, clicks: 0, campaigns: new Set() };
-    }
-    map[date].spend += row.amountSpent;
-    map[date].impressions += row.impressions;
-    map[date].reach += row.reach;
-    map[date].clicks += row.results;
-    if (row.campaignName) map[date].campaigns.add(row.campaignName);
-  });
-  return Object.values(map).map(d => ({
-    ...d,
-    campaigns: d.campaigns.size,
-    cpc: d.clicks > 0 ? d.spend / d.clicks : 0,
-    ctr: d.impressions > 0 ? (d.clicks / d.impressions) * 100 : 0,
-  })).sort((a, b) => a.date.localeCompare(b.date));
-}
 
 // Cross-reference daily: for each date, combine ad spend + commission data
 export function crossReferenceDaily(metaAdsData, commissionData) {
@@ -808,4 +859,114 @@ export function aggregateByCompleteDate(data) {
         .sort((a, b) => b.commission - a.commission),
     }))
     .sort((a, b) => b.date.localeCompare(a.date)); // terbaru di atas
+}
+
+// ===== AD EVALUATION — 3+ HARI =====
+
+/**
+ * Evaluate a campaign's performance when it has run 3+ days.
+ * Returns: verdict (profit/boncos/bep), recommendation (scale/monitor/kill),
+ * trend (improving/declining/stable), score (0-100), daily averages.
+ */
+export function evaluateCampaignPerformance(campaign, dailyData) {
+  const durationDays = campaign.durationDays || 0;
+  const totalSpend = campaign.totalSpend || 0;
+  const revenue = campaign.revenue || 0;
+  const profitLoss = campaign.profitLoss ?? (revenue - totalSpend);
+  const roas = totalSpend > 0 ? revenue / totalSpend : 0;
+  
+  // Daily averages
+  const dailyAvgSpend = durationDays > 0 ? totalSpend / durationDays : 0;
+  const dailyAvgRevenue = durationDays > 0 ? revenue / durationDays : 0;
+  const dailyAvgProfit = durationDays > 0 ? profitLoss / durationDays : 0;
+
+  // Trend analysis: compare first half vs second half of dailyData
+  let trend = 'stable'; // improving | declining | stable
+  let trendValue = 0;
+  if (dailyData && dailyData.length >= 2) {
+    const mid = Math.floor(dailyData.length / 2);
+    const firstHalf = dailyData.slice(0, mid);
+    const secondHalf = dailyData.slice(mid);
+    
+    const firstHalfProfit = firstHalf.reduce((s, d) => s + (d.profitLoss || 0), 0) / firstHalf.length;
+    const secondHalfProfit = secondHalf.reduce((s, d) => s + (d.profitLoss || 0), 0) / secondHalf.length;
+    
+    trendValue = secondHalfProfit - firstHalfProfit;
+    const threshold = dailyAvgSpend * 0.1; // 10% of daily avg spend
+    
+    if (trendValue > threshold) trend = 'improving';
+    else if (trendValue < -threshold) trend = 'declining';
+  }
+
+  // Score calculation (0-100)
+  // Based on: ROAS (50%), Trend (30%), Efficiency (20%)
+  let score = 0;
+  
+  // ROAS score (0-50): 0x=0, 1x=25, 2x+=50
+  const roasScore = Math.min(roas * 25, 50);
+  
+  // Trend score (0-30): declining=-15, stable=15, improving=30
+  const trendScore = trend === 'improving' ? 30 : trend === 'stable' ? 15 : 0;
+  
+  // Efficiency score (0-20): based on CPC and CTR
+  const ctr = campaign.ctr || 0;
+  const efficiencyScore = Math.min(ctr * 4, 20);
+  
+  score = Math.round(roasScore + trendScore + efficiencyScore);
+  score = Math.max(0, Math.min(100, score));
+
+  // Verdict
+  let verdict = 'bep';
+  if (profitLoss > 1000) verdict = 'profit';
+  else if (profitLoss < -1000) verdict = 'boncos';
+
+  // Recommendation based on duration + score + trend + ROAS
+  let recommendation = 'monitor'; // scale | monitor | kill
+  let recommendationDetail = '';
+  const isEvaluatable = durationDays >= 3;
+  
+  if (isEvaluatable) {
+    if (verdict === 'profit' && (trend === 'improving' || trend === 'stable')) {
+      recommendation = 'scale';
+      recommendationDetail = `Sudah ${durationDays} hari & PROFIT (${formatPercent(roas * 100, 0)} ROAS). Rekomendasi: Naikkan budget 20-30%!`;
+    } else if (verdict === 'profit') {
+      recommendation = 'monitor';
+      recommendationDetail = `Profit tapi tren melambat. Pantau 1 hari lagi sebelum scale.`;
+    } else if (verdict === 'boncos') {
+      recommendation = 'kill';
+      recommendationDetail = `Sudah ${durationDays} hari & BONCOS (rugi -Rp ${Math.abs(Math.round(profitLoss)).toLocaleString('id-ID')}). Matikan atau ganti materi!`;
+    } else {
+      recommendation = 'monitor';
+      recommendationDetail = `Sudah ${durationDays} hari posisi BEP (impas). Evaluasi hook & penawaran iklan.`;
+    }
+  } else {
+    // Under 3 days (testing phase)
+    if (verdict === 'profit') {
+      recommendation = 'scale';
+      recommendationDetail = `Baru ${durationDays} hari tapi sudah PROFIT! Tunggu genap 3 hari untuk scale besar.`;
+    } else if (verdict === 'boncos') {
+      recommendation = 'monitor';
+      recommendationDetail = `Baru ${durationDays} hari (testing). Masih boncos, pantau hingga 3 hari sebelum ambil tindakan.`;
+    } else {
+      recommendation = 'monitor';
+      recommendationDetail = `Baru ${durationDays} hari (testing). Performa masih seimbang.`;
+    }
+  }
+
+  return {
+    verdict,
+    recommendation,
+    recommendationDetail,
+    score,
+    trend,
+    trendValue,
+    durationDays,
+    dailyAvgSpend,
+    dailyAvgRevenue,
+    dailyAvgProfit,
+    roas,
+    profitLoss,
+    totalSpend,
+    revenue,
+  };
 }
