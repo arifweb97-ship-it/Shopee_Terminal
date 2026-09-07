@@ -734,6 +734,7 @@ tbody td.text-success { color: var(--success); font-weight: 600; }
   font-weight: 800;
   background: linear-gradient(135deg, var(--text-primary) 30%, var(--accent));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   font-family: 'JetBrains Mono', monospace;
   letter-spacing: 2px;

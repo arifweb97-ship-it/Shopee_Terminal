@@ -369,38 +369,45 @@ export default function AdEvaluationTab({ metaAdsData = [], tagLinkData = [], co
         </div>
 
         <div className="table-container" style={{ overflowX: 'auto' }}>
-          <table className="eval-table">
-            <thead>
-              <tr>
-                <th style={{ width: 40, textAlign: 'center' }}>#</th>
-                <th style={{ width: 50, textAlign: 'center' }} onClick={() => handleSort('score')} className="sortable-th">
-                  Skor {getSortArrow('score')}
-                </th>
-                <th onClick={() => handleSort('campaignName')} className="sortable-th">
-                  Campaign & TagLink Shopee {getSortArrow('campaignName')}
-                </th>
-                <th style={{ textAlign: 'center' }}>Mulai Iklan</th>
-                <th style={{ textAlign: 'center' }} onClick={() => handleSort('durationDays')} className="sortable-th">
-                  Durasi Terhitung {getSortArrow('durationDays')}
-                </th>
-                <th style={{ textAlign: 'right' }} onClick={() => handleSort('totalSpend')} className="sortable-th">
-                  Biaya Meta Ads {getSortArrow('totalSpend')}
-                </th>
-                <th style={{ textAlign: 'right' }} onClick={() => handleSort('revenue')} className="sortable-th">
-                  Komisi Shopee {getSortArrow('revenue')}
-                </th>
-                <th style={{ textAlign: 'right' }} onClick={() => handleSort('profitLoss')} className="sortable-th">
-                  Net Profit / Rugi {getSortArrow('profitLoss')}
-                </th>
-                <th style={{ textAlign: 'center' }} onClick={() => handleSort('roas')} className="sortable-th">
-                  ROAS {getSortArrow('roas')}
-                </th>
-                <th style={{ textAlign: 'center' }}>Status Evaluasi</th>
-                <th style={{ textAlign: 'center' }}>Rekomendasi Aksi</th>
-                <th style={{ width: 60, textAlign: 'center' }}>Detail</th>
-              </tr>
-            </thead>
-            <tbody>
+          <div className="eval-table" style={{ minWidth: 1050 }}>
+            <div className="eval-row-main" style={{ 
+              borderBottom: '1px solid var(--border-color)', 
+              color: 'var(--text-muted)', 
+              fontSize: 11, 
+              fontWeight: 600, 
+              textTransform: 'uppercase', 
+              letterSpacing: '0.5px',
+              paddingTop: 14,
+              paddingBottom: 14
+            }}>
+              <div style={{ width: 40, textAlign: 'center' }}>#</div>
+              <div style={{ width: 50, textAlign: 'center' }} onClick={() => handleSort('score')} className="sortable-th">
+                Skor {getSortArrow('score')}
+              </div>
+              <div style={{ flex: '1 1 200px', minWidth: 180 }} onClick={() => handleSort('campaignName')} className="sortable-th">
+                Campaign & TagLink {getSortArrow('campaignName')}
+              </div>
+              <div style={{ width: 90, textAlign: 'center' }}>Mulai Iklan</div>
+              <div style={{ width: 140, textAlign: 'center' }} onClick={() => handleSort('durationDays')} className="sortable-th">
+                Durasi {getSortArrow('durationDays')}
+              </div>
+              <div style={{ width: 110, textAlign: 'right' }} onClick={() => handleSort('totalSpend')} className="sortable-th">
+                Biaya Meta Ads {getSortArrow('totalSpend')}
+              </div>
+              <div style={{ width: 110, textAlign: 'right' }} onClick={() => handleSort('revenue')} className="sortable-th">
+                Komisi {getSortArrow('revenue')}
+              </div>
+              <div style={{ width: 120, textAlign: 'right' }} onClick={() => handleSort('profitLoss')} className="sortable-th">
+                Profit / Rugi {getSortArrow('profitLoss')}
+              </div>
+              <div style={{ width: 70, textAlign: 'center' }} onClick={() => handleSort('roas')} className="sortable-th">
+                ROAS {getSortArrow('roas')}
+              </div>
+              <div style={{ width: 95, textAlign: 'center' }}>Status</div>
+              <div style={{ width: 110, textAlign: 'center' }}>Aksi</div>
+              <div style={{ width: 50, textAlign: 'center' }}>Detail</div>
+            </div>
+            <div>
               {sorted.map((c, idx) => {
                 const ev = c.evaluation;
                 const vCfg = VERDICT_CONFIG[ev.verdict] || VERDICT_CONFIG.bep;
@@ -409,8 +416,8 @@ export default function AdEvaluationTab({ metaAdsData = [], tagLinkData = [], co
                 const cleanName = c.campaignName.replace(/\s*Setingan\s*New/gi, '').trim();
 
                 return (
-                  <tr key={c.campaignName} className={`eval-table-row ${isExpanded ? 'row-expanded' : ''}`}>
-                    <td colSpan={12} style={{ padding: 0 }}>
+                  <div key={c.campaignName} className={`eval-table-row ${isExpanded ? 'row-expanded' : ''}`}>
+                    <div style={{ padding: 0 }}>
                       <div
                         className="eval-row-main"
                         onClick={() => setExpandedCampaign(isExpanded ? null : c.campaignName)}
@@ -589,12 +596,12 @@ export default function AdEvaluationTab({ metaAdsData = [], tagLinkData = [], co
                           </div>
                         </div>
                       )}
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          </div>
         </div>
       </div>
     </div>
