@@ -549,6 +549,7 @@ export default function AdEvaluationTab({ metaAdsData = [], tagLinkData = [], co
                           : null;
                         const profitDays = c.dailyData ? c.dailyData.filter(d => d.profitLoss > 0).length : 0;
                         const boncosDays = c.dailyData ? c.dailyData.filter(d => d.profitLoss < 0).length : 0;
+                        const avgSpendPerDay = dailyLen > 0 ? Math.round(totalDailySpend / dailyLen) : 0;
 
                         return (
                         <div className="eval-expand-container animate-in">
@@ -643,6 +644,7 @@ export default function AdEvaluationTab({ metaAdsData = [], tagLinkData = [], co
                                       <tr>
                                         <th>Tanggal</th>
                                         <th style={{ textAlign: 'right' }}>Spend</th>
+                                        <th style={{ textAlign: 'right' }}>Spend Rata²</th>
                                         <th style={{ textAlign: 'right' }}>Komisi</th>
                                         <th style={{ textAlign: 'right' }}>P/L</th>
                                         <th style={{ textAlign: 'center' }}>ROAS</th>
@@ -664,6 +666,12 @@ export default function AdEvaluationTab({ metaAdsData = [], tagLinkData = [], co
                                               {d.isAveraged ? 'RATA²' : 'REAL'}
                                             </div>
                                           </td>
+                                          <td style={{ textAlign: 'right' }}>
+                                            <div style={{ color: '#b0b0b0', fontSize: 11 }}>
+                                              {formatRupiah(avgSpendPerDay)}
+                                            </div>
+                                            <div style={{ fontSize: 8, marginTop: 1, color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.3px' }}>PER HARI</div>
+                                          </td>
                                           <td style={{ textAlign: 'right', color: d.commission > 0 ? '#00ff00' : 'var(--text-muted)' }}>
                                             {d.commission > 0 ? formatRupiah(d.commission) : '—'}
                                           </td>
@@ -684,6 +692,9 @@ export default function AdEvaluationTab({ metaAdsData = [], tagLinkData = [], co
                                         </td>
                                         <td style={{ textAlign: 'right', fontWeight: 700, color: '#ff6b6b' }}>
                                           {formatRupiah(totalDailySpend)}
+                                        </td>
+                                        <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--text-muted)' }}>
+                                          {formatRupiah(avgSpendPerDay)}
                                         </td>
                                         <td style={{ textAlign: 'right', fontWeight: 700, color: '#00ff00' }}>
                                           {formatRupiah(totalDailyComm)}
