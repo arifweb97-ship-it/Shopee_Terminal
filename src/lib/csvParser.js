@@ -370,7 +370,7 @@ export function parseMetaAdsData(csvText, ppnRate = 0) {
     const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1; // inclusive
 
     if (diffDays <= 1) {
-      expandedData.push(row);
+      expandedData.push({ ...row, isAveragedSpend: false });
     } else {
       const dailySpend = row.amountSpent / diffDays;
       const dailyImpressions = row.impressions / diffDays;
@@ -392,7 +392,9 @@ export function parseMetaAdsData(csvText, ppnRate = 0) {
           amountSpent: dailySpend,
           impressions: dailyImpressions,
           reach: dailyReach,
-          results: dailyResults
+          results: dailyResults,
+          isAveragedSpend: true,
+          originalRangeDays: diffDays,
         });
       }
     }
@@ -671,7 +673,8 @@ export function crossReferenceDaily(metaAdsData, commissionData) {
   metaAdsData.forEach(row => {
     const date = row.reportStart;
     if (!date) return;
-    if (!adsByDate[date]) adsByDate[date] = { spend: 0, impressions: 0, clicks: 0, campaigns: new Set() };
+    if (!adsByDate[date]) adsByDate[date] = { spend: 0, impressions: 0, clicks: 0, campaigns: new Set(), isAveraged: false };
+    if (row.isAveragedSpend) adsByDate[date].isAveraged = true;
     adsByDate[date].spend += row.amountSpent;
     adsByDate[date].impressions += row.impressions;
     adsByDate[date].clicks += row.results;
@@ -709,6 +712,7 @@ export function crossReferenceDaily(metaAdsData, commissionData) {
     return {
       date,
       spend,
+      isAveraged: ads.isAveraged,
       impressions: ads.impressions,
       adClicks: ads.clicks,
       campaigns: ads.campaigns.size || 0,

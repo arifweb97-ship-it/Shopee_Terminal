@@ -534,7 +534,23 @@ export default function AdEvaluationTab({ metaAdsData = [], tagLinkData = [], co
                       </div>
 
                       {/* ===== EXPANDABLE ACCORDION SECTION ===== */}
-                      {isExpanded && (
+                      {isExpanded && (() => {
+                        const hasAveragedData = c.dailyData && c.dailyData.some(d => d.isAveraged);
+                        const hasRealData = c.dailyData && c.dailyData.some(d => !d.isAveraged && d.spend > 0);
+                        const dailyLen = c.dailyData ? c.dailyData.length : 0;
+                        const totalDailySpend = c.dailyData ? c.dailyData.reduce((s, d) => s + d.spend, 0) : 0;
+                        const totalDailyComm = c.dailyData ? c.dailyData.reduce((s, d) => s + d.commission, 0) : 0;
+                        const totalDailyPL = totalDailyComm - totalDailySpend;
+                        const bestDay = c.dailyData && c.dailyData.length > 0
+                          ? c.dailyData.reduce((best, d) => d.profitLoss > best.profitLoss ? d : best, c.dailyData[0])
+                          : null;
+                        const worstDay = c.dailyData && c.dailyData.length > 0
+                          ? c.dailyData.reduce((worst, d) => d.profitLoss < worst.profitLoss ? d : worst, c.dailyData[0])
+                          : null;
+                        const profitDays = c.dailyData ? c.dailyData.filter(d => d.profitLoss > 0).length : 0;
+                        const boncosDays = c.dailyData ? c.dailyData.filter(d => d.profitLoss < 0).length : 0;
+
+                        return (
                         <div className="eval-expand-container animate-in">
                           <div className="eval-expand-grid">
                             {/* Rekomendasi detail card */}
@@ -543,11 +559,61 @@ export default function AdEvaluationTab({ metaAdsData = [], tagLinkData = [], co
                               <p style={{ fontSize: 12, color: 'var(--text-primary)', margin: '6px 0 10px 0', lineHeight: 1.5 }}>
                                 {ev.recommendationDetail}
                               </p>
+
+                              {/* Data Type Info */}
+                              <div style={{
+                                display: 'flex', alignItems: 'center', gap: 6, fontSize: 10,
+                                padding: '5px 8px', borderRadius: 6, marginBottom: 10,
+                                background: hasAveragedData ? 'rgba(255,176,0,0.08)' : 'rgba(0,229,255,0.08)',
+                                border: `1px solid ${hasAveragedData ? 'rgba(255,176,0,0.2)' : 'rgba(0,229,255,0.2)'}`,
+                                color: hasAveragedData ? '#ffb000' : '#00e5ff',
+                              }}>
+                                {hasAveragedData ? '📊' : '✅'}
+                                <span>
+                                  Data Spend: <strong>{hasAveragedData ? 'Rata-rata (Estimasi)' : 'Real (Harian)'}</strong>
+                                  {hasAveragedData && ' — CSV Meta Ads di-export sebagai range, bukan harian'}
+                                </span>
+                              </div>
+
                               <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
                                 <span>Trend: <strong style={{ color: 'var(--text-primary)' }}>{ev.trend === 'improving' ? '↗ Membaik' : ev.trend === 'declining' ? '↘ Menurun' : '→ Stabil'}</strong></span>
                                 <span>Rata-rata Spend: <strong style={{ color: 'var(--text-primary)' }}>{formatRupiah(Math.round(ev.dailyAvgSpend))}/hari</strong></span>
                                 <span>Rata-rata Komisi: <strong style={{ color: 'var(--text-primary)' }}>{formatRupiah(Math.round(ev.dailyAvgRevenue))}/hari</strong></span>
                               </div>
+
+                              {/* Ringkasan Harian */}
+                              {dailyLen > 0 && (
+                                <div style={{
+                                  display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8,
+                                  marginTop: 10, fontSize: 11,
+                                }}>
+                                  <div style={{
+                                    background: 'rgba(0,255,0,0.06)', border: '1px solid rgba(0,255,0,0.15)',
+                                    borderRadius: 6, padding: '6px 8px',
+                                  }}>
+                                    <div style={{ color: 'var(--text-muted)', fontSize: 9, marginBottom: 2 }}>HARI PROFIT</div>
+                                    <div style={{ color: '#00ff00', fontWeight: 700 }}>{profitDays} <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>dari {dailyLen} hari</span></div>
+                                    {bestDay && (
+                                      <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 2 }}>
+                                        Terbaik: {formatDateShort(bestDay.date)} (+{formatRupiah(bestDay.profitLoss)})
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div style={{
+                                    background: 'rgba(255,61,87,0.06)', border: '1px solid rgba(255,61,87,0.15)',
+                                    borderRadius: 6, padding: '6px 8px',
+                                  }}>
+                                    <div style={{ color: 'var(--text-muted)', fontSize: 9, marginBottom: 2 }}>HARI BONCOS</div>
+                                    <div style={{ color: '#ff3d57', fontWeight: 700 }}>{boncosDays} <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>dari {dailyLen} hari</span></div>
+                                    {worstDay && worstDay.profitLoss < 0 && (
+                                      <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 2 }}>
+                                        Terburuk: {formatDateShort(worstDay.date)} ({formatRupiah(worstDay.profitLoss)})
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
                               <button
                                 className="eval-detail-btn"
                                 onClick={(e) => { e.stopPropagation(); onCampaignClick?.(c.campaignName); }}
@@ -560,34 +626,78 @@ export default function AdEvaluationTab({ metaAdsData = [], tagLinkData = [], co
                             <div className="eval-expand-box">
                               <div className="eval-expand-box-title">📅 PERFORMA HARIAN</div>
                               {c.dailyData && c.dailyData.length > 0 ? (
-                                <table className="eval-mini-table">
-                                  <thead>
-                                    <tr>
-                                      <th>Tanggal</th>
-                                      <th style={{ textAlign: 'right' }}>Spend</th>
-                                      <th style={{ textAlign: 'right' }}>Komisi</th>
-                                      <th style={{ textAlign: 'right' }}>P/L</th>
-                                      <th style={{ textAlign: 'center' }}>ROAS</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {c.dailyData.map(d => (
-                                      <tr key={d.date}>
-                                        <td>{formatDateShort(d.date)}</td>
-                                        <td style={{ textAlign: 'right', color: '#ff6b6b' }}>{formatRupiah(d.spend)}</td>
-                                        <td style={{ textAlign: 'right', color: d.commission > 0 ? '#00ff00' : 'var(--text-muted)' }}>
-                                          {d.commission > 0 ? formatRupiah(d.commission) : '—'}
+                                <>
+                                  {/* Warning banner for averaged data */}
+                                  {hasAveragedData && (
+                                    <div style={{
+                                      fontSize: 10, color: '#ffb000', background: 'rgba(255,176,0,0.06)',
+                                      border: '1px solid rgba(255,176,0,0.15)', borderRadius: 6,
+                                      padding: '6px 10px', marginBottom: 8, lineHeight: 1.6,
+                                    }}>
+                                      ⚠️ Kolom Spend bertanda <strong style={{ color: '#ffb000' }}>~</strong> adalah <strong>rata-rata</strong> (total spend ÷ jumlah hari range).
+                                      Untuk data spend harian real, export CSV dengan breakdown <strong>"By Day"</strong> di Meta Ads Manager.
+                                    </div>
+                                  )}
+                                  <table className="eval-mini-table">
+                                    <thead>
+                                      <tr>
+                                        <th>Tanggal</th>
+                                        <th style={{ textAlign: 'right' }}>Spend</th>
+                                        <th style={{ textAlign: 'right' }}>Komisi</th>
+                                        <th style={{ textAlign: 'right' }}>P/L</th>
+                                        <th style={{ textAlign: 'center' }}>ROAS</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {c.dailyData.map(d => (
+                                        <tr key={d.date}>
+                                          <td>{formatDateShort(d.date)}</td>
+                                          <td style={{ textAlign: 'right' }}>
+                                            <div style={{ color: '#ff6b6b', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
+                                              {d.isAveraged && <span title="Spend rata-rata (estimasi)" style={{ color: '#ffb000', fontWeight: 700, fontSize: 11 }}>~</span>}
+                                              {formatRupiah(d.spend)}
+                                            </div>
+                                            <div style={{
+                                              fontSize: 8, marginTop: 1, fontWeight: 600, letterSpacing: '0.3px',
+                                              color: d.isAveraged ? '#ffb000' : '#00e5ff',
+                                            }}>
+                                              {d.isAveraged ? 'RATA²' : 'REAL'}
+                                            </div>
+                                          </td>
+                                          <td style={{ textAlign: 'right', color: d.commission > 0 ? '#00ff00' : 'var(--text-muted)' }}>
+                                            {d.commission > 0 ? formatRupiah(d.commission) : '—'}
+                                          </td>
+                                          <td style={{ textAlign: 'right', color: d.profitLoss >= 0 ? '#00ff00' : '#ff3d57', fontWeight: 700 }}>
+                                            {d.profitLoss >= 0 ? '+' : ''}{formatRupiah(d.profitLoss)}
+                                          </td>
+                                          <td style={{ textAlign: 'center' }}>
+                                            {d.spend > 0 && d.commission > 0 ? `${(d.commission / d.spend).toFixed(2)}x` : '—'}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                    {/* Summary/Totals Row */}
+                                    <tfoot>
+                                      <tr style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                                        <td style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)' }}>
+                                          TOTAL ({dailyLen} hari)
                                         </td>
-                                        <td style={{ textAlign: 'right', color: d.profitLoss >= 0 ? '#00ff00' : '#ff3d57', fontWeight: 700 }}>
-                                          {d.profitLoss >= 0 ? '+' : ''}{formatRupiah(d.profitLoss)}
+                                        <td style={{ textAlign: 'right', fontWeight: 700, color: '#ff6b6b' }}>
+                                          {formatRupiah(totalDailySpend)}
                                         </td>
-                                        <td style={{ textAlign: 'center' }}>
-                                          {d.spend > 0 && d.commission > 0 ? `${(d.commission / d.spend).toFixed(2)}x` : '—'}
+                                        <td style={{ textAlign: 'right', fontWeight: 700, color: '#00ff00' }}>
+                                          {formatRupiah(totalDailyComm)}
+                                        </td>
+                                        <td style={{ textAlign: 'right', fontWeight: 800, color: totalDailyPL >= 0 ? '#00ff00' : '#ff3d57' }}>
+                                          {totalDailyPL >= 0 ? '+' : ''}{formatRupiah(totalDailyPL)}
+                                        </td>
+                                        <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--accent)' }}>
+                                          {totalDailySpend > 0 ? `${(totalDailyComm / totalDailySpend).toFixed(2)}x` : '—'}
                                         </td>
                                       </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
+                                    </tfoot>
+                                  </table>
+                                </>
                               ) : (
                                 <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '12px 0' }}>
                                   Data harian Shopee belum match dengan campaign ini atau hanya ada 1 hari data report.
@@ -596,7 +706,8 @@ export default function AdEvaluationTab({ metaAdsData = [], tagLinkData = [], co
                             </div>
                           </div>
                         </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   </div>
                 );
